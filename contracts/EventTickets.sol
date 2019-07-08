@@ -46,7 +46,10 @@ contract EventTickets {
         Create a modifier that throws an error if the msg.sender is not the owner.
     */
     modifier verifyOwner() {require(msg.sender==owner, "Not allowed user"); _;}
-
+    modifier verifyIsOpen() {require(myEvent.isOpen == true, "Event Closed"); _;}
+    modifier verifyFunds(uint totalTickets) {require(msg.value >= (totalTickets*TICKET_PRICE), "Not enough funds"); _;}
+    modifier verifyTicketsAvailable(uint totalTickets) {require((myEvent.totalTickets - myEvent.sales) > totalTickets, "Not enough tickets"); _;}
+    modifier verifyTicketsAvailableForRefund() {require(myEvent.buyers[msg.sender] > 0, "No tickets available for refund"); _;}
     /*
         Define a constructor.
         The constructor takes 3 arguments, the description, the URL and the number of tickets for sale.
@@ -105,18 +108,18 @@ contract EventTickets {
             - refund any surplus value sent with the transaction
             - emit the appropriate event
     */
-    function buyTickets(uint ticketAmount)
+    function buyTickets(uint totalTickets)
         public
         payable
+        verifyIsOpen
+        verifyFunds(totalTickets)
+        verifyTicketsAvailable(totalTickets)
     {
-        require(myEvent.isOpen == true, "Event Closed");
-        require(msg.value >= (ticketAmount*TICKET_PRICE), "Not enough funds");
-        require((myEvent.totalTickets - myEvent.sales) > ticketAmount, "Not enough tickets");
-        myEvent.buyers[msg.sender] += ticketAmount;
-        myEvent.sales += ticketAmount;
-        uint amountToRefund = msg.value - (ticketAmount*TICKET_PRICE);
+        myEvent.buyers[msg.sender] += totalTickets;
+        myEvent.sales += totalTickets;
+        uint amountToRefund = msg.value - (totalTickets*TICKET_PRICE);
         msg.sender.transfer(amountToRefund);
-        emit LogBuyTickets(msg.sender, ticketAmount);
+        emit LogBuyTickets(msg.sender, totalTickets);
     }
 
     /*
@@ -131,10 +134,10 @@ contract EventTickets {
     function getRefund()
         public
         payable
+        verifyTicketsAvailableForRefund
     {
         uint ticketsRefunded = myEvent.buyers[msg.sender];
-        require(ticketsRefunded > 0, "No tickets available for refund");
-        myEvent.buyers[msg.sender] -= ticketsRefunded;
+        myEvent.buyers[msg.sender] = 0;
         myEvent.sales -= ticketsRefunded;
         uint amountToRefund = ticketsRefunded * TICKET_PRICE;
         msg.sender.transfer(amountToRefund);
